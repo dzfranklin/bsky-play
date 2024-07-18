@@ -1,0 +1,73 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: datasette-ingress
+  namespace: bsky-play
+spec:
+  rules:
+    - host: "bsky-play.dfranklin.dev"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: datasette
+                port: { name: http }
+  tls:
+    - hosts:
+        - "bsky-play.dfranklin.dev"
+      secretName: api-cert
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: datasette
+  namespace: bsky-play
+spec:
+  type: ClusterIP
+  selector:
+    app: bsky-play
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 80
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bsky-play
+  namespace: bsky-play
+  labels:
+    app: bsky-play
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: bsky-play
+  template:
+    metadata:
+      name: bsky-play
+      labels:
+        app: bsky-play
+    spec:
+      containers:
+        - name: ingester
+          image: ghcr.io/dzfranklin/bsky-play:latest
+          volumeMounts:
+            - mountPath: /data
+              name: data
+        - name: datasette
+          image: ghcr.io/dzfranklin/bsky-play-datasette:0.64.8
+          command: [ "datasette", "-p", "80", "-h", "0.0.0.0", "/data/query.db" ]
+          volumeMounts:
+            - mountPath: /data
+              name: data
+          ports:
+            - containerPort: 80
+              name: http
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: bsky-play-data-pvc
